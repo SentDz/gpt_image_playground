@@ -1,15 +1,12 @@
-import type { ApiMode, AppSettings } from '../types'
-import { normalizeBaseUrl } from './devProxy'
+import type { AppSettings } from '../types'
 import {
   createDefaultOpenAIProfile,
-  DEFAULT_IMAGES_MODEL,
-  DEFAULT_RESPONSES_MODEL,
   findEquivalentApiProfile,
   mergeImportedSettings,
   normalizeSettings,
 } from './apiProfiles'
 
-const URL_SETTING_KEYS = ['settings', 'apiUrl', 'apiKey', 'codexCli', 'apiMode', 'model']
+const URL_SETTING_KEYS = ['apiKey']
 
 function getProfileDedupKey(profile: Pick<AppSettings['profiles'][number], 'provider' | 'baseUrl' | 'apiKey' | 'model' | 'apiMode'>) {
   return JSON.stringify([
@@ -80,32 +77,16 @@ export function clearUrlSettingParams(searchParams: URLSearchParams) {
 }
 
 export function buildSettingsFromUrlParams(currentSettings: Partial<AppSettings> | unknown, searchParams: URLSearchParams): Partial<AppSettings> {
-  const importedSettings = getUrlSettingsPayload(searchParams)
-  const apiUrlParam = searchParams.get('apiUrl')
   const apiKeyParam = searchParams.get('apiKey')
-  const codexCliParam = searchParams.get('codexCli')
-  const apiModeParam = searchParams.get('apiMode')
-  const modelParam = searchParams.get('model')
-  const apiMode: ApiMode | undefined = apiModeParam === 'images' || apiModeParam === 'responses' ? apiModeParam : undefined
+  const settings = normalizeSettings(currentSettings)
 
-  const hasLegacyOpenAIParams = apiUrlParam !== null || apiKeyParam !== null || codexCliParam !== null || apiMode !== undefined || modelParam !== null
-  const settings = importedSettings == null
-    ? normalizeSettings(currentSettings)
-    : activateFirstImportedProfile(mergeImportedSettings(currentSettings, importedSettings), importedSettings)
-
-  if (hasLegacyOpenAIParams) {
-    const profileApiMode = apiMode ?? 'images'
+  if (apiKeyParam !== null) {
     const profile = createDefaultOpenAIProfile({
       id: createUrlProfileId(new Set(settings.profiles.map((item) => item.id))),
       name: 'URL 参数配置',
-      apiMode: profileApiMode,
-      model: profileApiMode === 'responses' ? DEFAULT_RESPONSES_MODEL : DEFAULT_IMAGES_MODEL,
-      apiProxy: false,
+      apiMode: settings.apiMode,
     })
-    if (apiUrlParam !== null) profile.baseUrl = normalizeBaseUrl(apiUrlParam.trim())
-    if (apiKeyParam !== null) profile.apiKey = apiKeyParam.trim()
-    if (modelParam !== null && modelParam.trim()) profile.model = modelParam.trim()
-    if (codexCliParam !== null) profile.codexCli = codexCliParam.trim().toLowerCase() === 'true'
+    profile.apiKey = apiKeyParam.trim()
 
     const existingProfile = settings.profiles.find((item) => getProfileDedupKey(item) === getProfileDedupKey(profile))
     if (existingProfile) {
@@ -119,5 +100,5 @@ export function buildSettingsFromUrlParams(currentSettings: Partial<AppSettings>
     })
   }
 
-  return importedSettings == null ? {} : settings
+  return {}
 }

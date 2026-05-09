@@ -31,7 +31,7 @@ import {
 import { callImageApi } from './lib/api'
 import { getFalErrorMessage, getFalQueuedImageResult } from './lib/falAiImageApi'
 import { getCustomQueuedImageResult } from './lib/openaiCompatibleImageApi'
-import { validateMaskMatchesImage } from './lib/canvasImage'
+import { optimizeReferenceImageForApi, validateMaskMatchesImage } from './lib/canvasImage'
 import { orderInputImagesForMask } from './lib/mask'
 import { getChangedParams, normalizeParamsForSettings } from './lib/paramCompatibility'
 import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate'
@@ -257,6 +257,16 @@ function orderImagesWithMaskFirst(images: InputImage[], maskTargetImageId: strin
   const [maskImage] = next.splice(maskIdx, 1)
   next.unshift(maskImage)
   return next
+}
+
+async function optimizeInputImagesForApi(inputDataUrls: string[], hasMask: boolean): Promise<string[]> {
+  return Promise.all(
+    inputDataUrls.map((dataUrl, index) =>
+      hasMask && index === 0
+        ? dataUrl
+        : optimizeReferenceImageForApi(dataUrl),
+    ),
+  )
 }
 
 export function getPersistedState(state: AppState) {
@@ -539,7 +549,7 @@ export const useStore = create<AppState>()(
       setConfirmDialog: (confirmDialog) => set({ confirmDialog }),
     }),
     {
-      name: 'gpt-image-playground',
+      name: 'image2-jike-shengtu',
       partialize: getPersistedState,
       merge: mergePersistedState,
     },
@@ -626,25 +636,6 @@ function scheduleOpenAIWatchdog(taskId: string, timeoutSeconds: number) {
     if (failed) useStore.getState().showToast('OpenAI 任务请求超时', 'error')
   }, remainingMs)
   openAIWatchdogTimers.set(taskId, timer)
-}
-
-export function showCodexCliPrompt(force = false, reason = '接口返回的提示词已被改写') {
-  const state = useStore.getState()
-  const settings = state.settings
-  const promptKey = getCodexCliPromptKey(settings)
-  if (!force && (settings.codexCli || state.dismissedCodexCliPrompts.includes(promptKey))) return
-
-  state.setConfirmDialog({
-    title: '检测到 Codex CLI API',
-    message: `${reason}，当前 API 来源很可能是 Codex CLI。\n\n是否开启 Codex CLI 兼容模式？开启后会禁用在此处无效的质量参数，并在 Images API 多图生成时使用并发请求，解决该 API 数量参数无效的问题。同时，提示词文本开头会加入简短的不改写要求，避免模型重写提示词，偏离原意。`,
-    confirmText: '开启',
-    action: () => {
-      const state = useStore.getState()
-      state.dismissCodexCliPrompt(promptKey)
-      state.setSettings({ codexCli: true })
-    },
-    cancelAction: () => useStore.getState().dismissCodexCliPrompt(promptKey),
-  })
 }
 
 function getFalRecoveryProfile(settings: AppSettings, task: TaskRecord) {
@@ -1109,12 +1100,13 @@ async function executeTask(taskId: string) {
       maskDataUrl = await ensureImageCached(task.maskImageId)
       if (!maskDataUrl) throw new Error('遮罩图片已不存在')
     }
+    const apiInputDataUrls = await optimizeInputImagesForApi(inputDataUrls, Boolean(maskDataUrl))
 
     const result = await callImageApi({
       settings: requestSettings,
       prompt: task.prompt,
       params: task.params,
-      inputImageDataUrls: inputDataUrls,
+      inputImageDataUrls: apiInputDataUrls,
       maskDataUrl,
       onFalRequestEnqueued: (request) => {
         falRequestInfo = request
@@ -1165,13 +1157,8 @@ async function executeTask(taskId: string) {
       (revisedPrompt) => revisedPrompt?.trim() && revisedPrompt.trim() !== task.prompt.trim(),
     )
     const hasRevisedPromptValue = shouldStoreRevisedPrompts && result.revisedPrompts?.some((revisedPrompt) => revisedPrompt?.trim())
-    if (taskProvider === 'openai' && !activeProfile.codexCli) {
-      if (promptWasRevised) {
-        showCodexCliPrompt()
-      } else if (!hasRevisedPromptValue) {
-        showCodexCliPrompt(false, '接口没有返回官方 API 会返回的部分信息')
-      }
-    }
+    void promptWasRevised
+    void hasRevisedPromptValue
 
     // 更新任务
     const latestBeforeUpdate = useStore.getState().tasks.find((t) => t.id === taskId)
@@ -1658,7 +1645,7 @@ export async function exportData(options: ExportOptions = { exportConfig: true, 
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `gpt-image-playground-${formatExportFileTime(new Date(exportedAt))}.zip`
+    a.download = `image2-jike-shengtu-${formatExportFileTime(new Date(exportedAt))}.zip`
     a.click()
     URL.revokeObjectURL(url)
     useStore.getState().showToast('数据已导出', 'success')

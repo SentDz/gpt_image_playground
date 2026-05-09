@@ -5,6 +5,10 @@ export interface ImageDimensions {
   height: number
 }
 
+const DEFAULT_REFERENCE_IMAGE_MAX_EDGE = 2048
+const DEFAULT_REFERENCE_IMAGE_QUALITY = 0.88
+const MIN_REFERENCE_IMAGE_SAVINGS_RATIO = 0.15
+
 export async function loadImage(dataUrl: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image()
@@ -51,6 +55,55 @@ export async function canvasToBlob(canvas: HTMLCanvasElement, type = 'image/png'
       else resolve(blob)
     }, type, quality)
   })
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(reader.error ?? new Error('图片导出失败'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+export async function optimizeReferenceImageForApi(
+  dataUrl: string,
+  options: {
+    maxEdge?: number
+    quality?: number
+    minSavingsRatio?: number
+  } = {},
+): Promise<string> {
+  const originalBlob = await dataUrlToBlob(dataUrl)
+  const image = await loadImage(dataUrl)
+  const maxEdge = options.maxEdge ?? DEFAULT_REFERENCE_IMAGE_MAX_EDGE
+  const quality = options.quality ?? DEFAULT_REFERENCE_IMAGE_QUALITY
+  const minSavingsRatio = options.minSavingsRatio ?? MIN_REFERENCE_IMAGE_SAVINGS_RATIO
+  const longestEdge = Math.max(image.naturalWidth, image.naturalHeight)
+  const scale = longestEdge > maxEdge ? maxEdge / longestEdge : 1
+  const width = Math.max(1, Math.round(image.naturalWidth * scale))
+  const height = Math.max(1, Math.round(image.naturalHeight * scale))
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('当前浏览器不支持 Canvas')
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(image, 0, 0, width, height)
+
+  let optimizedBlob: Blob
+  try {
+    optimizedBlob = await canvasToBlob(canvas, 'image/webp', quality)
+  } catch {
+    return dataUrl
+  }
+
+  if (!optimizedBlob.type.includes('webp')) return dataUrl
+  if (optimizedBlob.size >= originalBlob.size * (1 - minSavingsRatio)) return dataUrl
+
+  return blobToDataUrl(optimizedBlob)
 }
 
 export async function validateMaskMatchesImage(maskDataUrl: string, imageDataUrl: string): Promise<MaskCoverage> {

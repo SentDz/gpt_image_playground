@@ -15,6 +15,11 @@ const RATIOS = [
   { label: '3:4', value: '3:4' },
   { label: '21:9', value: '21:9' },
 ]
+const FOUR_K_RATIOS = new Set(['16:9', '9:16'])
+
+function getRatiosForTier(tier: SizeTier) {
+  return tier === '4K' ? RATIOS.filter((item) => FOUR_K_RATIOS.has(item.value)) : RATIOS
+}
 
 interface Props {
   currentSize: string
@@ -34,7 +39,7 @@ function parseSize(size: string) {
 function findPresetForSize(size: string) {
   const normalized = normalizeImageSize(size)
   for (const tier of TIERS) {
-    for (const ratio of RATIOS) {
+    for (const ratio of getRatiosForTier(tier)) {
       if (calculateImageSize(tier, ratio.value) === normalized) {
         return { tier, ratio: ratio.value }
       }
@@ -71,6 +76,7 @@ export default function SizePickerModal({ currentSize, onSelect, onClose, allowA
   }, [])
 
   const activeRatio = ratio === 'custom' ? customRatio : ratio
+  const availableRatios = getRatiosForTier(tier)
   const parsedCustomRatio = parseRatio(customRatio)
   const customRatioValid = ratio !== 'custom' || Boolean(parsedCustomRatio)
   const customRatioClamped = Boolean(
@@ -128,6 +134,13 @@ export default function SizePickerModal({ currentSize, onSelect, onClose, allowA
       setHintVisible(true)
       hintTimerRef.current = null
     }, 450)
+  }
+
+  const selectTier = (nextTier: SizeTier) => {
+    setTier(nextTier)
+    if (nextTier === '4K' && !FOUR_K_RATIOS.has(ratio)) {
+      setRatio('16:9')
+    }
   }
 
   const applySize = () => {
@@ -211,7 +224,7 @@ export default function SizePickerModal({ currentSize, onSelect, onClose, allowA
                   <div className="mb-2 text-xs font-medium text-gray-400 dark:text-gray-500">基准分辨率</div>
                   <div className="grid grid-cols-3 gap-2">
                     {TIERS.map((item) => (
-                      <button key={item} className={buttonClass(tier === item)} onClick={() => setTier(item)}>
+                      <button key={item} className={buttonClass(tier === item)} onClick={() => selectTier(item)}>
                         {item}
                       </button>
                     ))}
@@ -221,14 +234,16 @@ export default function SizePickerModal({ currentSize, onSelect, onClose, allowA
                 <section>
                   <div className="mb-2 text-xs font-medium text-gray-400 dark:text-gray-500">图像比例</div>
                   <div className="grid grid-cols-4 gap-2">
-                    {RATIOS.map((item) => (
+                    {availableRatios.map((item) => (
                       <button key={item.value} className={buttonClass(ratio === item.value)} onClick={() => setRatio(item.value)}>
                         {item.label}
                       </button>
                     ))}
-                    <button className={`${buttonClass(ratio === 'custom')} col-span-4`} onClick={() => setRatio('custom')}>
-                      自定义比例
-                    </button>
+                    {tier !== '4K' && (
+                      <button className={`${buttonClass(ratio === 'custom')} col-span-4`} onClick={() => setRatio('custom')}>
+                        自定义比例
+                      </button>
+                    )}
                   </div>
                 </section>
 

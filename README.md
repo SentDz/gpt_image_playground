@@ -1,10 +1,10 @@
-# GPT Image Playground
+# image2即刻生图
 
 基于 OpenAI 图像生成接口的图片生成与编辑工具。提供简洁精美的 Web UI，支持文本生图、参考图与遮罩编辑，数据纯本地化存储，带来流畅的历史记录与参数管理体验。
 
-> 若需调用非 HTTPS 的内网或本地 HTTP API，请使用 GitHub Pages 版本或自行部署，Vercel 部署的体验版绑定的 `.dev` 域名因安全策略通常要求接口必须为 HTTPS。
+> 若需调用非 HTTPS 的内网或本地 HTTP API，请使用本地开发版本或自行部署，Vercel 部署的体验版绑定的 `.dev` 域名因安全策略通常要求接口必须为 HTTPS。
 
-[**🌐 Vercel 在线体验**](https://gpt-image-playground.cooksleep.dev) &nbsp;|&nbsp; [**🌐 GitHub Pages 在线体验**](https://cooksleep.github.io/gpt_image_playground)
+[**🌐 在线体验**](https://your-domain.example)
 
 ---
 
@@ -67,33 +67,20 @@
 - **快捷批量操作**：桌面端支持鼠标拖拽框选、Ctrl/⌘ 连选，移动端支持顺滑侧滑多选；轻松实现批量收藏与清理。
 - **极致性能与隐私**：所有记录与图片均存放在浏览器 IndexedDB 中（采用 SHA-256 去重压缩），不经过任何第三方服务器。支持一键打包导出 ZIP 备份。
 
-### 🔌 API 兼容增强
-- **Codex CLI 兼容模式**：专为非标准 API (如 Codex CLI) 打造。开启后应用 Codex CLI 实际支持的参数，将 Images API 的多图请求拆分为并发单图。
-- **提示词防改写**：Responses API 会始终在请求文本前加入强制指令防止提示词被改写；开启 Codex CLI 模式后，Images API 也会获得同等保护。
+### 🔌 固定接口体验
+- **固定 API URL**：请求统一发送至 `https://geekai.live/v1`，用户只需填写 API Key。
+- **双模式生成**：输入框内可切换模式 1 和模式 2；模式 1 走 Images API，模式 2 走 Responses API 并使用 `gpt-5.4`。
 
 ---
 
 ## 🚀 部署与使用
 
-支持多种部署与开发方式。无论使用哪种方式，你都可以预设默认的 API 节点。
+支持多种部署与开发方式，API URL 已固定为 `https://geekai.live/v1`。
 
 <details>
-<summary><strong>▲ 方式一：Vercel 一键部署 (推荐)</strong></summary>
+<summary><strong>▲ 方式一：Vercel 部署 (推荐)</strong></summary>
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FCookSleep%2Fgpt_image_playground&project-name=gpt-image-playground&repository-name=gpt-image-playground)
-
-点击上方按钮导入仓库即可，Vercel 会自动执行构建并部署静态文件。
-
-**配置默认 API URL**：在 Vercel 项目的 **Settings → Environment Variables** 中添加 `VITE_DEFAULT_API_URL`（如 `https://api.openai.com/v1`），然后重新部署即可生效。
-
-**配置自动更新**：
-
-本项目已在 `vercel.json` 中关闭了默认的自动部署。若需在同步 GitHub 上游代码后自动更新 Vercel 部署：
-
-1. 在 Vercel 项目设置 **Settings -> Git** 的 **Deploy Hooks** 中创建一个名为 `Release` 的 Hook（Branch 填 `main`）并复制生成的 URL。
-2. 在你 Fork 的 GitHub 仓库设置 **Settings -> Secrets and variables -> Actions** 中，新建 Secret `VERCEL_DEPLOY_HOOK`，填入刚才的 URL。
-
-此后，每次在 GitHub 点击 **Sync fork** 同步上游，都会自动触发 Vercel 构建部署最新版。
+在 Vercel 中导入项目后，平台会自动执行构建并部署静态文件。
 
 </details>
 
@@ -116,44 +103,17 @@ npm run deploy:cf
 
 部署脚本会先执行 `npm run build`，再通过 `wrangler deploy` 上传 `dist/` 目录。
 
-**配置默认 API URL**：Cloudflare Workers 的环境变量不会自动改写已经构建好的静态文件。若需预设默认 API 地址，请在构建前设置 `VITE_DEFAULT_API_URL` 后再部署。
-
-```bash
-VITE_DEFAULT_API_URL=https://api.openai.com/v1 npm run deploy:cf
-```
-
-PowerShell 示例：
-
-```powershell
-$env:VITE_DEFAULT_API_URL="https://api.openai.com/v1"; npm run deploy:cf
-```
-
 </details>
 
 <details>
 <summary><strong>🐳 方式三：Docker 部署</strong></summary>
 
-官方镜像已发布至 GitHub Container Registry。Docker 部署支持在运行时注入默认配置。
-
-**环境变量说明：**
-
-- `DEFAULT_API_URL`：设置页面上默认显示的 API 地址。
-- `API_PROXY_URL`：配置内置代理实际转发到的目标 API 地址（仅开启代理时有效）。
-- `ENABLE_API_PROXY`：设为 `true` 开启容器内置 Nginx 同源代理，用于解决浏览器跨域（CORS）限制。开启后，浏览器将请求同源的 `/api-proxy/`，再由 Nginx 转发至 `API_PROXY_URL`。
-- `HOST` / `PORT`：指定容器内 Nginx 监听的地址和端口（默认 `0.0.0.0:80`）。
-
-> ⚠️ **安全警告**：开启 API 代理后，任何人都能将你的服务器作为代理来请求目标 API。建议仅在有访问控制（如 IP 白名单）或本地网络中开启。
-
-> 💡 **兼容迁移**：旧版本中的 `API_URL` 已拆分为 `DEFAULT_API_URL` 和 `API_PROXY_URL`。容器启动时会自动将遗留的 `API_URL` 作为两个新变量的兜底值，实现无缝兼容。建议更新配置文件，逐步迁移至新变量。
+Docker 部署可直接使用固定接口配置。
 
 **1. Docker CLI 示例**
 
 ```bash
-docker run -d -p 8080:80 \
-  -e DEFAULT_API_URL=https://api.openai.com/v1 \
-  -e ENABLE_API_PROXY=true \
-  -e API_PROXY_URL=https://api.openai.com/v1 \
-  ghcr.io/cooksleep/gpt_image_playground:latest
+docker run -d -p 8080:80 image2-jike-shengtu:latest
 ```
 
 *(注：使用 host 网络时加 `--network host`，修改容器监听端口使用 `-e PORT=28080`)*
@@ -162,10 +122,8 @@ docker run -d -p 8080:80 \
 
 ```yaml
 services:
-  gpt-image-playground:
-    image: ghcr.io/cooksleep/gpt_image_playground:latest
-    environment:
-      - DEFAULT_API_URL=https://api.openai.com/v1
+  image2-jike-shengtu:
+    image: image2-jike-shengtu:latest
     ports:
       - "8080:80"
     restart: unless-stopped
@@ -182,30 +140,20 @@ services:
 
 **1. 环境准备与启动**
 
-你可以在项目根目录新建 `.env.local` 文件配置默认 API URL（如 `VITE_DEFAULT_API_URL=https://api.openai.com/v1`）。然后安装依赖并启动：
+安装依赖并启动：
 
 ```bash
 npm install
 npm run dev
 ```
 
-**2. 本地开发跨域代理 (可选)**
-
-如果在本地开发时遇到浏览器的 CORS 限制，可开启本地代理转发：
-
-```bash
-cp dev-proxy.config.example.json dev-proxy.config.json
-```
-
-修改 `dev-proxy.config.json`，将 `target` 设置为真实的图片接口地址。重启开发服务器后，在页面设置中开启 **API 代理** 即可（请求将被转发如 `http://localhost:5173/api-proxy/... -> target/...`）。此功能仅在 `npm run dev` 阶段生效，不会影响打包产物。
-
-**3. 构建静态产物**
+**2. 构建静态产物**
 
 ```bash
 npm run build
 ```
 
-构建输出的文件位于 `dist/` 目录下，可将其部署至任何静态文件服务器（如普通 Nginx、GitHub Pages、Netlify 等）。
+构建输出的文件位于 `dist/` 目录下，可将其部署至任何静态文件服务器（如普通 Nginx、Netlify 等）。
 
 </details>
 
@@ -213,94 +161,18 @@ npm run build
 
 ## 🛠️ API 配置与 URL 传参
 
-点击页面右上角的 **设置 (⚙️)**，可以配置模型、密钥与其他参数。
+点击页面右上角的 **设置 (⚙️)** 只需填写 API Key。API URL 固定为 `https://geekai.live/v1`。
 
-- **双接口模式**：支持 `Images API` (需填写 GPT Image 模型，如 `gpt-image-2`) 和 `Responses API` (需填写支持该工具的文本模型，如 `gpt-5.5`)。
-- **API 代理**：开启后，浏览器将请求同源的 `/api-proxy/` 路径，交由当前部署环境（Docker 或 本地开发）代理转发至真实 API，以绕开浏览器 CORS 限制。
-- **习惯配置**：支持设置提交任务后是否清空输入框，以及重启后是否加载上次的输入框。关闭“重启后加载上次的输入框”后，将不再持久化提示词和参考图。
-- **Codex CLI 兼容模式**：如果你在使用源于 Codex CLI 的 API，可以开启该模式。开启后应用 Codex CLI 实际支持的参数，Images API 的多图生成也将改为并发单图请求。此外，提示词文本开头会加入简短的防改写指令，防止模型偏离原意。（注：Responses API 无论是否开启此模式，都会默认加入防改写指令）。
-- **智能诊断提示**：当应用检测到接口返回的提示词被强制改写，或缺少官方 API 常规返回的参数时，会主动提示你是否针对当前配置组合开启 Codex CLI 模式。
+- **模式 1**：默认模式，走 Images API，模型为 `gpt-image-2`。
+- **模式 2**：走 Responses API，模型为 `gpt-5.4`。
 
 ### URL 传参快速填充
 
-应用支持通过 URL 查询参数快速填入配置，非常适合创建书签或集成分享。根据你的服务商类型，选择对应的方式：
-
-**方式一：标准 OpenAI 兼容服务商**
-直接使用简短的查询参数配置：
-- `?apiUrl=https://你的代理地址.com`
-- `?apiKey=sk-xxxx`
-- `?apiMode=images` 或 `?apiMode=responses`（未传时默认为 `images`）
-- `?model=gpt-image-2`（未传时按 `apiMode` 使用默认模型）
-- `?codexCli=true`（开启 Codex CLI 兼容模式）
-
-例如，集成到 New API 的聊天系统：
+应用支持通过 URL 查询参数快速填入 API Key：
 
 ```text
-https://gpt-image-playground.cooksleep.dev?apiUrl={address}&apiKey={key}&model={model}
+https://your-domain.example?apiKey={key}
 ```
-
-```text
-https://cooksleep.github.io/gpt_image_playground?apiUrl={address}&apiKey={key}&model={model}
-```
-
-**方式二：自定义格式服务商**
-如果需要导入自定义格式的 API 配置，请使用 `settings` 参数并传入 URL 编码后的完整 JSON：
-- `?settings={URL编码后的JSON}`（只读取 `customProviders` 和 `profiles` 列表）
-
-> 推荐在项目内的 **设置 - API 配置 - 服务商类型 - 创建自定义服务商 - AI 一键生成与导入** 完成配置生成与导入后，在 **API 配置 - 当前配置 - 复制icon** 处一键复制可导入配置的 URL（可选择不包含 API key）
-
-JSON 结构示例：
-
-```json
-{
-  "customProviders": [
-    {
-      "id": "custom-example-task",
-      "name": "示例异步任务服务商",
-      "submit": {
-        "path": "images/generations",
-        "method": "POST",
-        "contentType": "json",
-        "body": {
-          "model": "$profile.model",
-          "prompt": "$prompt",
-          "size": "$params.size",
-          "quality": "$params.quality",
-          "output_format": "$params.output_format",
-          "output_compression": "$params.output_compression",
-          "n": "$params.n",
-          "image_urls": "$inputImages.dataUrls"
-        },
-        "taskIdPath": "data.0.task_id"
-      },
-      "poll": {
-        "path": "tasks/{task_id}",
-        "method": "GET",
-        "intervalSeconds": 5,
-        "statusPath": "data.status",
-        "successValues": ["completed"],
-        "failureValues": ["failed", "cancelled"],
-        "errorPath": "data.error.message",
-        "result": {
-          "imageUrlPaths": ["data.result.images.*.url.*"],
-          "b64JsonPaths": []
-        }
-      }
-    }
-  ],
-  "profiles": [
-    {
-      "name": "示例异步任务服务商",
-      "provider": "custom-example-task",
-      "baseUrl": "https://api.example.com/v1",
-      "model": "example-image-model",
-      "apiMode": "images"
-    }
-  ]
-}
-```
-
-第三方服务商可以参考 [自定义服务商 LLM 提示词](docs/custom-provider-llm-prompt.md)，让 LLM 根据自己的 API 文档生成可导入的完整配置。导入后只需要在设置里补充 API Key。
 
 ---
 
@@ -316,7 +188,3 @@ JSON 结构示例：
 本项目基于 [MIT License](LICENSE) 开源。
 
 特别致谢：[LINUX DO](https://linux.do)
-
-## ⭐ Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=CookSleep/gpt_image_playground&type=Date)](https://www.star-history.com/#CookSleep/gpt_image_playground&Date)

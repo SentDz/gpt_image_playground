@@ -2,7 +2,7 @@ import { useRef, useEffect, useCallback, useState, useMemo, type ReactNode } fro
 import { createPortal } from 'react-dom'
 import { useStore, submitTask, addImageFromFile, updateTaskInStore, removeMultipleTasks, getCachedImage, ensureImageCached } from '../store'
 import { DEFAULT_PARAMS } from '../types'
-import { getActiveApiProfile, normalizeSettings } from '../lib/apiProfiles'
+import { DEFAULT_IMAGES_MODEL, DEFAULT_RESPONSES_MODEL, getActiveApiProfile, normalizeSettings } from '../lib/apiProfiles'
 import { DEFAULT_FAL_IMAGE_SIZE, getChangedParams, getOutputImageLimitForSettings, normalizeParamsForSettings } from '../lib/paramCompatibility'
 import { normalizeImageSize } from '../lib/size'
 import { createMaskPreviewDataUrl } from '../lib/canvasImage'
@@ -41,6 +41,7 @@ export default function InputBar() {
   const params = useStore((s) => s.params)
   const setParams = useStore((s) => s.setParams)
   const settings = useStore((s) => s.settings)
+  const setSettings = useStore((s) => s.setSettings)
   const reusedTaskApiProfileId = useStore((s) => s.reusedTaskApiProfileId)
   const setShowSettings = useStore((s) => s.setShowSettings)
   const setLightboxImageId = useStore((s) => s.setLightboxImageId)
@@ -173,7 +174,6 @@ export default function InputBar() {
   const [submitHover, setSubmitHover] = useState(false)
   const [attachHover, setAttachHover] = useState(false)
   const [compressionHintVisible, setCompressionHintVisible] = useState(false)
-  const [moderationHintVisible, setModerationHintVisible] = useState(false)
   const [sizeHintVisible, setSizeHintVisible] = useState(false)
   const [qualityHintVisible, setQualityHintVisible] = useState(false)
   const [imageHintId, setImageHintId] = useState<string | null>(null)
@@ -192,7 +192,6 @@ export default function InputBar() {
   const suppressImageClickRef = useRef(false)
   const maskConflictNoticeShownRef = useRef(false)
   const compressionHintTimerRef = useRef<number | null>(null)
-  const moderationHintTimerRef = useRef<number | null>(null)
   const sizeHintTimerRef = useRef<number | null>(null)
   const qualityHintTimerRef = useRef<number | null>(null)
   const imageHintTimerRef = useRef<number | null>(null)
@@ -221,7 +220,6 @@ export default function InputBar() {
   const canSubmit = Boolean(prompt.trim() && hasSubmitApiConfig)
   const activeProvider = activeProfile.provider
   const isFalProvider = activeProvider === 'fal'
-  const moderationDisabled = activeProfile.apiMode === 'responses' || isFalProvider
   const compressionDisabled = params.output_format === 'png' || isFalProvider
   const outputImageLimit = getOutputImageLimitForSettings(effectiveSettings)
   const isFalTextToImage = isFalProvider && inputImages.length === 0
@@ -251,6 +249,11 @@ export default function InputBar() {
     ? inputImages.filter((img) => img.id !== maskTargetImage.id)
     : inputImages
 
+  const setApiMode = (apiMode: 'images' | 'responses') => {
+    const model = apiMode === 'responses' ? DEFAULT_RESPONSES_MODEL : DEFAULT_IMAGES_MODEL
+    setSettings({ apiMode, model })
+  }
+
   useEffect(() => {
     setOutputCompressionInput(
       params.output_compression == null ? '' : String(params.output_compression),
@@ -272,9 +275,6 @@ export default function InputBar() {
   useEffect(() => () => {
     if (compressionHintTimerRef.current != null) {
       window.clearTimeout(compressionHintTimerRef.current)
-    }
-    if (moderationHintTimerRef.current != null) {
-      window.clearTimeout(moderationHintTimerRef.current)
     }
     if (qualityHintTimerRef.current != null) {
       window.clearTimeout(qualityHintTimerRef.current)
@@ -378,30 +378,6 @@ export default function InputBar() {
     preventDefault()
     showNLimitHint()
   }, [nInput, nInputFocused, outputImageLimit, params.n, showNLimitHint])
-
-  const showModerationHint = () => {
-    if (moderationDisabled) setModerationHintVisible(true)
-  }
-
-  const hideModerationHint = () => {
-    setModerationHintVisible(false)
-    clearModerationHintTimer()
-  }
-
-  const clearModerationHintTimer = () => {
-    if (moderationHintTimerRef.current != null) {
-      window.clearTimeout(moderationHintTimerRef.current)
-      moderationHintTimerRef.current = null
-    }
-  }
-
-  const startModerationHintTouch = () => {
-    if (!moderationDisabled) return
-    moderationHintTimerRef.current = window.setTimeout(() => {
-      setModerationHintVisible(true)
-      moderationHintTimerRef.current = null
-    }, 450)
-  }
 
   const showCompressionHint = () => setCompressionHintVisible(true)
 
@@ -994,6 +970,35 @@ export default function InputBar() {
 
   const renderParams = (cols: string) => (
     <div className={`grid ${cols} gap-2 text-xs flex-1`}>
+      <label className="flex flex-col gap-0.5">
+        <span className="text-gray-400 dark:text-gray-500 ml-1">模式</span>
+        <div className="grid grid-cols-2 rounded-xl border border-gray-200/60 bg-white/50 p-0.5 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.03]">
+          <button
+            type="button"
+            onClick={() => setApiMode('images')}
+            className={`rounded-lg px-2 py-1 text-xs font-medium transition-colors ${
+              activeProfile.apiMode === 'images'
+                ? 'bg-blue-500 text-white shadow-sm'
+                : 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/[0.06]'
+            }`}
+            title="模式1：Images API"
+          >
+            模式1
+          </button>
+          <button
+            type="button"
+            onClick={() => setApiMode('responses')}
+            className={`rounded-lg px-2 py-1 text-xs font-medium transition-colors ${
+              activeProfile.apiMode === 'responses'
+                ? 'bg-blue-500 text-white shadow-sm'
+                : 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/[0.06]'
+            }`}
+            title="模式2：Responses API"
+          >
+            模式2
+          </button>
+        </div>
+      </label>
       <label
         className="relative flex flex-col gap-0.5"
         onMouseEnter={showSizeHint}
@@ -1084,35 +1089,6 @@ export default function InputBar() {
         <ButtonTooltip
           visible={compressionHintVisible}
           text={isFalProvider ? 'fal.ai 不支持压缩率参数' : '仅 JPEG 和 WebP 支持压缩率'}
-        />
-      </label>
-      <label
-        className="relative flex flex-col gap-0.5"
-        onMouseEnter={showModerationHint}
-        onMouseLeave={hideModerationHint}
-        onTouchStart={startModerationHintTouch}
-        onTouchEnd={clearModerationHintTimer}
-        onTouchCancel={hideModerationHint}
-        onClick={showModerationHint}
-      >
-        <span className="text-gray-400 dark:text-gray-500 ml-1">审核</span>
-        <Select
-          value={moderationDisabled ? 'auto' : params.moderation}
-          onChange={(val) => {
-            if (!moderationDisabled) setParams({ moderation: val as any })
-          }}
-          options={[
-            { label: 'auto', value: 'auto' },
-            { label: 'low', value: 'low' },
-          ]}
-          disabled={moderationDisabled}
-          className={moderationDisabled
-            ? 'px-3 py-1.5 rounded-xl border border-gray-200/60 dark:border-white/[0.08] bg-gray-100/50 dark:bg-white/[0.05] opacity-50 cursor-not-allowed text-xs transition-all duration-200 shadow-sm'
-            : selectClass}
-        />
-        <ButtonTooltip
-          visible={moderationDisabled && moderationHintVisible}
-          text={isFalProvider ? 'fal.ai 不支持审核参数' : 'Responses API 不支持审核参数'}
         />
       </label>
       <label className="relative flex flex-col gap-0.5">

@@ -19,6 +19,11 @@ import {
 } from './imageApiShared'
 
 const PROMPT_REWRITE_GUARD_PREFIX = 'Use the following text as the complete prompt. Do not rewrite it:'
+const STAGGERED_REQUEST_INTERVAL_MS = 500
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, ms))
+}
 
 function appendQuery(path: string, query?: Record<string, string>): string {
   if (!query || !Object.keys(query).length) return path
@@ -211,7 +216,7 @@ export async function callOpenAICompatibleImageApi(opts: CallApiOptions, profile
 
 async function callImagesApi(opts: CallApiOptions, profile: ApiProfile, customProvider?: CustomProviderDefinition | null): Promise<CallApiResult> {
   const n = opts.params.n > 0 ? opts.params.n : 1
-  if (profile.codexCli && n > 1) {
+  if (n > 1) {
     return callImagesApiConcurrent(opts, profile, n, customProvider)
   }
 
@@ -219,9 +224,12 @@ async function callImagesApi(opts: CallApiOptions, profile: ApiProfile, customPr
 }
 
 async function callImagesApiConcurrent(opts: CallApiOptions, profile: ApiProfile, n: number, customProvider?: CustomProviderDefinition | null): Promise<CallApiResult> {
-  const singleOpts = { ...opts, params: { ...opts.params, n: 1, quality: 'auto' as const } }
+  const singleOpts = { ...opts, params: { ...opts.params, n: 1 } }
   const results = await Promise.allSettled(
-    Array.from({ length: n }).map(() => callImagesApiSingle(singleOpts, profile, customProvider)),
+    Array.from({ length: n }).map(async (_, index) => {
+      if (index > 0) await delay(index * STAGGERED_REQUEST_INTERVAL_MS)
+      return callImagesApiSingle(singleOpts, profile, customProvider)
+    }),
   )
 
   const successfulResults = results
@@ -282,10 +290,6 @@ async function callImagesApiSingle(opts: CallApiOptions, profile: ApiProfile, cu
       if (params.output_format !== 'png' && params.output_compression != null) {
         formData.append('output_compression', String(params.output_compression))
       }
-      if (params.n > 1) {
-        formData.append('n', String(params.n))
-      }
-
       const imageBlobs: Blob[] = []
       for (let i = 0; i < inputImageDataUrls.length; i++) {
         const dataUrl = inputImageDataUrls[i]
@@ -337,10 +341,6 @@ async function callImagesApiSingle(opts: CallApiOptions, profile: ApiProfile, cu
       if (params.output_format !== 'png' && params.output_compression != null) {
         body.output_compression = params.output_compression
       }
-      if (params.n > 1) {
-        body.n = params.n
-      }
-
       response = await fetch(buildApiUrl(profile.baseUrl, paths.generationPath, proxyConfig, useApiProxy), {
         method: 'POST',
         headers: {
@@ -638,7 +638,11 @@ async function callResponsesImageApi(opts: CallApiOptions, profile: ApiProfile):
     return callResponsesImageApiSingle(opts, profile)
   }
 
-  const promises = Array.from({ length: n }).map(() => callResponsesImageApiSingle(opts, profile))
+  const singleOpts = { ...opts, params: { ...opts.params, n: 1 } }
+  const promises = Array.from({ length: n }).map(async (_, index) => {
+    if (index > 0) await delay(index * STAGGERED_REQUEST_INTERVAL_MS)
+    return callResponsesImageApiSingle(singleOpts, profile)
+  })
   const results = await Promise.allSettled(promises)
   
   const successfulResults = results

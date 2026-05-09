@@ -14,9 +14,9 @@ import type {
 } from '../types'
 import { readRuntimeEnv } from './runtimeEnv'
 
-const DEFAULT_BASE_URL = readRuntimeEnv(import.meta.env.VITE_DEFAULT_API_URL) || 'https://api.openai.com/v1'
+const DEFAULT_BASE_URL = 'https://geekai.live/v1'
 export const DEFAULT_IMAGES_MODEL = 'gpt-image-2'
-export const DEFAULT_RESPONSES_MODEL = 'gpt-5.5'
+export const DEFAULT_RESPONSES_MODEL = 'gpt-5.4'
 export const DEFAULT_FAL_BASE_URL = 'https://fal.run'
 export const DEFAULT_FAL_MODEL = 'openai/gpt-image-2'
 export const DEFAULT_OPENAI_PROFILE_ID = 'default-openai'
@@ -253,18 +253,19 @@ export function normalizeCustomProviderDefinitions(input: unknown): CustomProvid
 }
 
 export function createDefaultOpenAIProfile(overrides: Partial<ApiProfile> = {}): ApiProfile {
+  const apiMode = overrides.apiMode === 'responses' ? 'responses' : 'images'
   return {
     id: DEFAULT_OPENAI_PROFILE_ID,
     name: '默认',
+    apiKey: '',
+    timeout: DEFAULT_API_TIMEOUT,
+    ...overrides,
     provider: 'openai',
     baseUrl: DEFAULT_BASE_URL,
-    apiKey: '',
-    model: DEFAULT_IMAGES_MODEL,
-    timeout: DEFAULT_API_TIMEOUT,
-    apiMode: 'images',
+    model: apiMode === 'responses' ? DEFAULT_RESPONSES_MODEL : DEFAULT_IMAGES_MODEL,
+    apiMode,
     codexCli: false,
-    apiProxy: false,
-    ...overrides,
+    apiProxy: true,
   }
 }
 
@@ -279,7 +280,7 @@ export function createDefaultFalProfile(overrides: Partial<ApiProfile> = {}): Ap
     timeout: DEFAULT_API_TIMEOUT,
     apiMode: 'images',
     codexCli: false,
-    apiProxy: false,
+    apiProxy: true,
     ...overrides,
   }
 }
@@ -293,7 +294,7 @@ export function switchApiProfileProvider(profile: ApiProfile, provider: ApiProvi
       model: DEFAULT_FAL_MODEL,
       apiMode: 'images',
       codexCli: false,
-      apiProxy: false,
+      apiProxy: true,
     }
   }
 
@@ -306,7 +307,7 @@ export function switchApiProfileProvider(profile: ApiProfile, provider: ApiProvi
       model: shouldUseOpenAIDefaults ? DEFAULT_IMAGES_MODEL : profile.model || DEFAULT_IMAGES_MODEL,
       apiMode: 'images',
       codexCli: false,
-      apiProxy: false,
+      apiProxy: true,
     }
   }
 
@@ -320,23 +321,21 @@ export function switchApiProfileProvider(profile: ApiProfile, provider: ApiProvi
 
 export function normalizeApiProfile(input: unknown, fallback?: Partial<ApiProfile>, customProviderIds = new Set<string>()): ApiProfile {
   const record = input && typeof input === 'object' ? input as Record<string, unknown> : {}
-  const rawProvider = typeof record.provider === 'string' ? record.provider : ''
-  const provider: ApiProvider = rawProvider === 'fal' || customProviderIds.has(rawProvider) ? rawProvider : 'openai'
-  const defaults = provider === 'fal' ? createDefaultFalProfile(fallback) : createDefaultOpenAIProfile(fallback)
   const apiMode: ApiMode = record.apiMode === 'responses' ? 'responses' : 'images'
+  const defaults = createDefaultOpenAIProfile({ ...fallback, apiMode })
 
   return {
     ...defaults,
     id: typeof record.id === 'string' && record.id.trim() ? record.id : defaults.id,
     name: typeof record.name === 'string' && record.name.trim() ? record.name : defaults.name,
-    provider,
-    baseUrl: typeof record.baseUrl === 'string' ? record.baseUrl : defaults.baseUrl,
+    provider: 'openai',
+    baseUrl: DEFAULT_BASE_URL,
     apiKey: typeof record.apiKey === 'string' ? record.apiKey : defaults.apiKey,
-    model: typeof record.model === 'string' && record.model.trim() ? record.model : defaults.model,
+    model: apiMode === 'responses' ? DEFAULT_RESPONSES_MODEL : DEFAULT_IMAGES_MODEL,
     timeout: typeof record.timeout === 'number' && Number.isFinite(record.timeout) ? record.timeout : defaults.timeout,
     apiMode,
-    codexCli: Boolean(record.codexCli),
-    apiProxy: Boolean(record.apiProxy),
+    codexCli: false,
+    apiProxy: true,
   }
 }
 
@@ -355,16 +354,13 @@ function validateImportedProfileRecord(input: unknown) {
 
 export function normalizeSettings(input: Partial<AppSettings> | unknown): AppSettings {
   const record = input && typeof input === 'object' ? input as Record<string, unknown> : {}
-  const customProviders = normalizeCustomProviderDefinitions(record.customProviders)
+  const customProviders: CustomProviderDefinition[] = []
   const customProviderIds = new Set(customProviders.map((provider) => provider.id))
+  const apiMode: ApiMode = record.apiMode === 'responses' ? 'responses' : 'images'
   const legacyProfile = createDefaultOpenAIProfile({
-    baseUrl: typeof record.baseUrl === 'string' ? record.baseUrl : DEFAULT_BASE_URL,
     apiKey: typeof record.apiKey === 'string' ? record.apiKey : '',
-    model: typeof record.model === 'string' && record.model.trim() ? record.model : DEFAULT_IMAGES_MODEL,
     timeout: typeof record.timeout === 'number' && Number.isFinite(record.timeout) ? record.timeout : DEFAULT_API_TIMEOUT,
-    apiMode: record.apiMode === 'responses' ? 'responses' : 'images',
-    codexCli: Boolean(record.codexCli),
-    apiProxy: Boolean(record.apiProxy),
+    apiMode,
   })
   const profiles = Array.isArray(record.profiles) && record.profiles.length
     ? record.profiles.map((profile) => normalizeApiProfile(profile, undefined, customProviderIds))
@@ -375,13 +371,13 @@ export function normalizeSettings(input: Partial<AppSettings> | unknown): AppSet
   const active = profiles.find((p) => p.id === activeProfileId) ?? profiles[0]
 
   return {
-    baseUrl: active.baseUrl,
+    baseUrl: DEFAULT_BASE_URL,
     apiKey: active.apiKey,
-    model: active.model,
+    model: active.apiMode === 'responses' ? DEFAULT_RESPONSES_MODEL : DEFAULT_IMAGES_MODEL,
     timeout: active.timeout,
     apiMode: active.apiMode,
-    codexCli: active.codexCli,
-    apiProxy: active.apiProxy,
+    codexCli: false,
+    apiProxy: true,
     customProviders,
     clearInputAfterSubmit: typeof record.clearInputAfterSubmit === 'boolean' ? record.clearInputAfterSubmit : false,
     persistInputOnRestart: typeof record.persistInputOnRestart === 'boolean' ? record.persistInputOnRestart : true,
@@ -471,16 +467,18 @@ export function getActiveApiProfile(settings: Partial<AppSettings> | unknown): A
   const record = settings && typeof settings === 'object' ? settings as Record<string, unknown> : {}
   const normalized = normalizeSettings(settings)
   const profile = normalized.profiles.find((p) => p.id === normalized.activeProfileId) ?? normalized.profiles[0] ?? createDefaultOpenAIProfile()
+  const apiMode = record.apiMode === 'images' || record.apiMode === 'responses' ? record.apiMode : profile.apiMode
 
   return {
     ...profile,
-    baseUrl: typeof record.baseUrl === 'string' ? record.baseUrl : profile.baseUrl,
+    provider: 'openai',
+    baseUrl: DEFAULT_BASE_URL,
     apiKey: typeof record.apiKey === 'string' ? record.apiKey : profile.apiKey,
-    model: typeof record.model === 'string' && record.model.trim() ? record.model : profile.model,
+    model: apiMode === 'responses' ? DEFAULT_RESPONSES_MODEL : DEFAULT_IMAGES_MODEL,
     timeout: typeof record.timeout === 'number' && Number.isFinite(record.timeout) ? record.timeout : profile.timeout,
-    apiMode: record.apiMode === 'images' || record.apiMode === 'responses' ? record.apiMode : profile.apiMode,
-    codexCli: typeof record.codexCli === 'boolean' ? record.codexCli : profile.codexCli,
-    apiProxy: typeof record.apiProxy === 'boolean' ? record.apiProxy : profile.apiProxy,
+    apiMode,
+    codexCli: false,
+    apiProxy: true,
   }
 }
 
@@ -656,7 +654,7 @@ export const DEFAULT_SETTINGS: AppSettings = normalizeSettings({
   timeout: DEFAULT_API_TIMEOUT,
   apiMode: 'images',
   codexCli: false,
-  apiProxy: false,
+  apiProxy: true,
   customProviders: [],
   clearInputAfterSubmit: false,
   persistInputOnRestart: true,
